@@ -32,12 +32,12 @@ import { ApiService, Property } from '../../services/api.service';
           <div class="form-grid">
             <div class="field-group">
               <label>Room</label>
-              <select [(ngModel)]="form.roomId" name="roomId" class="input" required>
-                <option value="" disabled>Select a room...</option>
+              <select [(ngModel)]="form.roomId" name="roomId" class="input" (change)="recalculate()" required>
+                <option [ngValue]="0" disabled>Select a room...</option>
                 <ng-container *ngFor="let prop of properties">
                   <optgroup [label]="prop.name + ' — ' + prop.city">
-                    <option *ngFor="let room of prop.rooms" [value]="room.id">
-                      {{ room.name }} (SAR {{ room.pricePerNight }}/night)
+                    <option *ngFor="let room of prop.rooms" [ngValue]="room.id">
+                      {{ room.name }} (SAR {{ room.pricePerNight | number }}/night)
                     </option>
                   </optgroup>
                 </ng-container>
@@ -81,7 +81,7 @@ import { ApiService, Property } from '../../services/api.service';
               ← Back to Rooms
             </button>
             <button type="submit" class="btn btn-primary btn-large"
-                    [disabled]="submitting || !bookingForm.valid">
+                    [disabled]="submitting || !bookingForm.valid || !form.roomId">
               {{ submitting ? 'Creating Booking...' : '✅ Confirm Booking' }}
             </button>
           </div>
@@ -125,16 +125,20 @@ export class BookingComponent implements OnInit {
     if (!this.form.checkIn || !this.form.checkOut || !this.form.roomId) {
       this.totalAmount = 0; return;
     }
-    const room = this.properties
-      .flatMap(p => p.rooms)
-      .find(r => r.id === +this.form.roomId);
+    const allRooms = this.properties.flatMap(p => p.rooms);
+    const room = allRooms.find(r => r.id === +this.form.roomId);
     if (!room) return;
     this.pricePerNight = room.pricePerNight;
-    this.nights = Math.max(0, (new Date(this.form.checkOut).getTime() - new Date(this.form.checkIn).getTime()) / 86400000);
+    const diff = (new Date(this.form.checkOut).getTime() - new Date(this.form.checkIn).getTime()) / 86400000;
+    this.nights = Math.max(0, Math.round(diff));
     this.totalAmount = this.pricePerNight * this.nights;
   }
 
   submit() {
+    if (!this.form.roomId) {
+      this.errorMsg = 'Please select a room.';
+      return;
+    }
     this.submitting = true;
     this.errorMsg = '';
     const req = {
@@ -150,7 +154,6 @@ export class BookingComponent implements OnInit {
         this.submitting = false;
       },
       error: (err: HttpErrorResponse) => {
-        // Show exact error message from API (especially 409 conflict message)
         this.errorMsg = err.error?.error || err.error?.message || err.message || 'An unexpected error occurred.';
         this.submitting = false;
       }
